@@ -290,6 +290,7 @@ int CvEMEstimator::run5Point( const CvMat* q1, const CvMat* q2, CvMat* ematrix )
 
 	Eigen::MatrixXd A(10, 20); 
 	calibrated_fivepoint_helper(EE.data(), A.data()); 
+	// A.setIdentity(10, 20);
 	A = A.block<10, 10>(0, 0).inverse() * A.block<10, 10>(0, 10); 
 	
 	Eigen::MatrixXd M = Eigen::MatrixXd::Zero(10, 10); 

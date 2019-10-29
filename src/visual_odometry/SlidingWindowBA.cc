@@ -52,7 +52,8 @@ SlidingWindowBA::addFrame(FramePtr& frame)
 
     if (m_mode == VO)
     {
-        frameCurr->cameraPose() = boost::make_shared<Pose>();
+        // frameCurr->cameraPose() = boost::make_shared<Pose>();
+        frameCurr->cameraPose() = boost::shared_ptr<Pose> (new Pose());
     }
 
     m_window.push_back(frameCurr);

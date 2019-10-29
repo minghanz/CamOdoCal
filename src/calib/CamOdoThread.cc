@@ -16,6 +16,8 @@
 #include "../../../../library/gpl/CameraEnums.h"
 #endif
 
+#include <fstream>
+
 namespace camodocal
 {
 
@@ -188,9 +190,12 @@ CamOdoThread::signalFinished(void)
 void
 CamOdoThread::threadFunction(void)
 {
+    // TemporalFeatureTracker tracker(m_camera,
+    //                                SURF_GPU_DETECTOR, SURF_GPU_DESCRIPTOR,
+    //                                RATIO_GPU, m_preprocess, m_camOdoTransform);
     TemporalFeatureTracker tracker(m_camera,
-                                   SURF_GPU_DETECTOR, SURF_GPU_DESCRIPTOR,
-                                   RATIO_GPU, m_preprocess, m_camOdoTransform);
+                                   ORB_DETECTOR, ORB_DESCRIPTOR,
+                                   RATIO, m_preprocess, m_camOdoTransform);
     tracker.setVerbose(m_camOdoCalib.getVerbose());
 
     FramePtr framePrev;
@@ -423,13 +428,14 @@ CamOdoThread::threadFunction(void)
 #ifdef VCHARGE_VIZ
         visualizeMap(overlay, tracker);
 #endif
-
+        std::cout << "# DEBUG: 1" << std::endl;
         int currentMotionCount = 0;
         if (odometryPoses.size() >= k_minVOSegmentSize)
         {
             currentMotionCount = odometryPoses.size() - 1;
         }
 
+        std::cout << "# DEBUG: 2" << std::endl;
         // visualize feature tracks
         std::ostringstream oss;
         oss << "# motions: " << m_camOdoCalib.getCurrentMotionCount() + currentMotionCount << " | "
@@ -437,6 +443,7 @@ CamOdoThread::threadFunction(void)
 
         std::string status = oss.str();
 
+        std::cout << "# DEBUG: 3" << std::endl;
         if (!tracker.getSketch().empty())
         {
             tracker.getSketch().copyTo(m_sketch);
@@ -446,6 +453,7 @@ CamOdoThread::threadFunction(void)
             colorImage.copyTo(m_sketch);
         }
 
+        std::cout << "# DEBUG: 4" << std::endl;
         int fontFace = cv::FONT_HERSHEY_COMPLEX;
         double fontScale = 0.5;
         int thickness = 1;
@@ -467,6 +475,8 @@ CamOdoThread::threadFunction(void)
         {
             m_completed = true;
         }
+
+        std::cout << "# DEBUG: 5" << std::endl;
     }
 
     if (!m_camOdoTransformUseEstimate)
@@ -479,6 +489,7 @@ CamOdoThread::threadFunction(void)
         m_camOdoTransform = H_cam_odo;
     }
 
+    std::cout << "# DEBUG: 6" << std::endl;
     {
         static boost::mutex mutex;
         boost::mutex::scoped_lock lock(mutex);
@@ -490,6 +501,12 @@ CamOdoThread::threadFunction(void)
 
         std::cout << "Rotation: " << std::endl << m_camOdoTransform.block<3,3>(0,0) << std::endl;
         std::cout << "Translation: " << std::endl << m_camOdoTransform.block<3,1>(0,3).transpose() << std::endl;
+        double roll, pitch, yaw;
+        Eigen::Matrix3d R = m_camOdoTransform.block<3,3>(0,0);
+        mat2RPY(R, roll, pitch, yaw);
+
+        std::cout << "Rotation yaw, picth, roll: " << std::endl;
+        std::cout << " " << yaw << " " << pitch << " " << roll << std::endl;
     }
 
     m_running = false;
@@ -522,7 +539,13 @@ CamOdoThread::addCamOdoCalibData(const std::vector<Eigen::Matrix4d, Eigen::align
 
     //static boost::mutex m;
     //boost::mutex::scoped_lock lock(m);
-
+    std::ofstream file_cam, file_odo; 
+    file_cam.open("output_cam_poses.txt");
+    file_odo.open("output_odo_poses.txt");
+    std::ofstream file_cam_inv, file_odo_inv; 
+    file_cam_inv.open("output_cam_poses_inv.txt");
+    file_odo_inv.open("output_odo_poses_inv.txt");
+    
     for (size_t i = 1; i < odoPoses.size(); ++i)
     {
         Eigen::Matrix4d relativeOdometryPose = odoPoses.at(i)->toMatrix().inverse() * odoPoses.at(i - 1)->toMatrix();
@@ -531,6 +554,49 @@ CamOdoThread::addCamOdoCalibData(const std::vector<Eigen::Matrix4d, Eigen::align
         Eigen::Matrix4d relativeCameraPose = camPoses.at(i) * camPoses.at(i - 1).inverse();
         camMotions.push_back(relativeCameraPose);
 
+        Eigen::Matrix4d OdoCurPose = odoPoses.at(i)->toMatrix();
+        Eigen::Matrix4d CamCurPose = camPoses.at(i);
+        Eigen::Matrix4d OdoCurPose_inv = OdoCurPose.inverse();
+        Eigen::Matrix4d CamCurPose_inv = CamCurPose.inverse();
+        
+        // print the camera poses and odo poses:
+        std::cout << "Cam Translation: " << std::endl << CamCurPose.block<3,1>(0,3).transpose() << std::endl;
+        std::cout << "Odo Translation: " << std::endl << OdoCurPose.block<3,1>(0,3).transpose() << std::endl;
+        {
+            double roll, pitch, yaw;
+            Eigen::Matrix3d R = CamCurPose.block<3,3>(0,0);
+            mat2RPY(R, roll, pitch, yaw);
+            file_cam << i << " ";
+            file_cam << CamCurPose.block<3,1>(0,3).transpose();
+            file_cam << " " << yaw << " " << pitch << " " << roll << std::endl;
+        }
+
+        {
+            double roll, pitch, yaw;
+            Eigen::Matrix3d R = OdoCurPose.block<3,3>(0,0);
+            mat2RPY(R, roll, pitch, yaw);
+            file_odo << i << " ";
+            file_odo << OdoCurPose.block<3,1>(0,3).transpose();
+            file_odo << " " << yaw << " " << pitch << " " << roll << std::endl;
+        }
+        {
+            double roll, pitch, yaw;
+            Eigen::Matrix3d R = CamCurPose_inv.block<3,3>(0,0);
+            mat2RPY(R, roll, pitch, yaw);
+            file_cam_inv << i << " ";
+            file_cam_inv << CamCurPose_inv.block<3,1>(0,3).transpose();
+            file_cam_inv << " " << yaw << " " << pitch << " " << roll << std::endl;
+        }
+
+        {
+            double roll, pitch, yaw;
+            Eigen::Matrix3d R = OdoCurPose_inv.block<3,3>(0,0);
+            mat2RPY(R, roll, pitch, yaw);
+            file_odo_inv << i << " ";
+            file_odo_inv << OdoCurPose_inv.block<3,1>(0,3).transpose();
+            file_odo_inv << " " << yaw << " " << pitch << " " << roll << std::endl;
+        }
+
         //Eigen::Vector3d todo = relativeOdometryPose.block<3,1>(0,3);
         //Eigen::Vector3d tcam = relativeCameraPose.block<3,1>(0,3);
         //if (std::isnan(todo[0]) || std::isnan(todo[1]) || std::isnan(todo[2]))
@@ -538,6 +604,12 @@ CamOdoThread::addCamOdoCalibData(const std::vector<Eigen::Matrix4d, Eigen::align
         //if (std::isnan(tcam[0]) || std::isnan(tcam[1]) || std::isnan(tcam[2]))
         //    std::cout << "cam [" << i << "] -> " << relativeCameraPose.block<3,1>(0,3).transpose() << std::endl;
     }
+
+    file_cam.close();
+    file_odo.close();
+    file_cam_inv.close();
+    file_odo_inv.close();
+    std::cout << "Pose files written. " << std::endl;
 
     if (!m_camOdoCalib.addMotionSegment(camMotions, odoMotions))
     {

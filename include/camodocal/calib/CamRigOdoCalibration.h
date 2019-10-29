@@ -85,6 +85,9 @@ public:
     void addGpsIns(double lat, double lon, double alt,
                    double qx, double qy, double qz, double qw,
                    uint64_t timestamp);
+    
+    // add by minghan
+    void addXyzYpr(double x, double y, double z, double yaw, double pitch, double roll, uint64_t timestamp);
 
     //! If an initial odo transform estimate for a camera is specified there will be no automatic estimation step performed. (@note setup before start()!)
     void setInitialCameraOdoTransformEstimates(unsigned camIdx, const Eigen::Matrix4d& odoT);

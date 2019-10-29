@@ -15,6 +15,20 @@ camodocal_link_libraries(intrinsic_calib
   camodocal_chessboard
 )
 
+camodocal_executable(intrinsic_generate
+  intrinsic_generate.cc
+)
+
+camodocal_link_libraries(intrinsic_generate
+  ${CAMODOCAL_PLATFORM_UNIX_LIBRARIES}
+  ${Boost_FILESYSTEM_LIBRARY}
+  ${Boost_PROGRAM_OPTIONS_LIBRARY}
+  ${Boost_SYSTEM_LIBRARY}
+  ${OpenCV_LIBS}
+  camodocal_calib
+  camodocal_chessboard
+)
+
 camodocal_executable(stereo_calib
   stereo_calib.cc
 )

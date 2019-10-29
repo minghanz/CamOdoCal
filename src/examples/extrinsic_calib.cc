@@ -29,6 +29,38 @@ namespace cv {
 #include "camodocal/calib/CamRigOdoCalibration.h"
 #include "camodocal/camera_models/CameraFactory.h"
 
+template<typename T>
+Eigen::Matrix<T, 3, 3> RPY2mat(T roll, T pitch, T yaw)
+{
+    Eigen::Matrix<T, 3, 3> m;
+
+    T cr = cos(roll);
+    T sr = sin(roll);
+    T cp = cos(pitch);
+    T sp = sin(pitch);
+    T cy = cos(yaw);
+    T sy = sin(yaw);
+
+    m(0,0) = cy * cp;
+    m(0,1) = cy * sp * sr - sy * cr;
+    m(0,2) = cy * sp * cr + sy * sr;
+    m(1,0) = sy * cp;
+    m(1,1) = sy * sp * sr + cy * cr;
+    m(1,2) = sy * sp * cr - cy * sr;
+    m(2,0) = - sp;
+    m(2,1) = cp * sr;
+    m(2,2) = cp * cr;
+    return m;
+}
+
+template<typename T>
+void mat2RPY(const Eigen::Matrix<T, 3, 3>& m, T& roll, T& pitch, T& yaw)
+{
+    roll = atan2(m(2,1), m(2,2));
+    pitch = atan2(-m(2,0), sqrt(m(2,1) * m(2,1) + m(2,2) * m(2,2)));
+    yaw = atan2(m(1,0), m(0,0));
+}
+
 int
 main(int argc, char** argv)
 {
@@ -53,21 +85,25 @@ main(int argc, char** argv)
     float keyframeDistance;
     std::string eventFile;
 
+    std::string data_path;
+    std::string data_path_default = "/media/minghanz/Seagate_Backup_Plus_Drive/CARLA/_out/episode_0000_02/data_for_CamOdoCal/";
+
     //================= Handling Program options ==================
     boost::program_options::options_description desc("Allowed options");
     desc.add_options()
         ("help", "produce help message")
-        ("calib,c", boost::program_options::value<std::string>(&calibDir)->default_value("calib"), "Directory containing camera calibration files.")
+        ("data-path", boost::program_options::value<std::string>(&data_path)->default_value(data_path_default), "Root directory containing input data.")
+        ("calib,c", boost::program_options::value<std::string>(&calibDir)->default_value(data_path+"calib"), "Directory containing camera calibration files.")
         ("estimate,e", boost::program_options::value<std::string>(&odoEstimateFile), "File containing estimate for the extrinsic calibration.")
         ("camera-count", boost::program_options::value<int>(&cameraCount)->default_value(1), "Number of cameras in rig.")
         ("f", boost::program_options::value<float>(&focal)->default_value(300.0f), "Nominal focal length.")
-        ("output,o", boost::program_options::value<std::string>(&outputDir)->default_value("calibration_data"), "Directory to write calibration data to.")
+        ("output,o", boost::program_options::value<std::string>(&outputDir)->default_value(data_path+"calibration_data"), "Directory to write calibration data to.")
         ("motions,m", boost::program_options::value<int>(&nMotions)->default_value(500), "Number of motions for calibration.")
         ("begin-stage", boost::program_options::value<int>(&beginStage)->default_value(0), "Stage to begin from.")
         ("preprocess", boost::program_options::bool_switch(&preprocessImages)->default_value(false), "Preprocess images.")
         ("optimize-intrinsics", boost::program_options::bool_switch(&optimizeIntrinsics)->default_value(false), "Optimize intrinsics in BA step.")
-        ("data", boost::program_options::value<std::string>(&dataDir)->default_value("data"), "Location of folder which contains working data.")
-        ("input", boost::program_options::value<std::string>(&inputDir)->default_value("input"), "Location of the folder containing all input data. Files must be named camera_%02d_%05d.png. In case if event file is specified, this is the path where to find frame_X/ subfolders")
+        ("data", boost::program_options::value<std::string>(&dataDir)->default_value(data_path+"data"), "Location of folder which contains working data.")
+        ("input", boost::program_options::value<std::string>(&inputDir)->default_value(data_path+"input"), "Location of the folder containing all input data. Files must be named camera_%02d_%05d.png. In case if event file is specified, this is the path where to find frame_X/ subfolders")
         ("event", boost::program_options::value<std::string>(&eventFile)->default_value(std::string("")), "Event log file to be used for frame and pose events.")
         ("ref-height", boost::program_options::value<float>(&refCameraGroundHeight)->default_value(0), "Height of the reference camera (cam=0) above the ground (cameras extrinsics will be relative to the reference camera)")
         ("keydist", boost::program_options::value<float>(&keyframeDistance)->default_value(0.4), "Distance of rig to be traveled before taking a keyframe (distance is measured by means of odometry poses)")
@@ -77,6 +113,16 @@ main(int argc, char** argv)
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
     boost::program_options::notify(vm);
 
+    calibDir = data_path + calibDir;
+    outputDir = data_path + outputDir;
+    dataDir = data_path + dataDir;
+    inputDir = data_path + inputDir;
+    #ifdef HAVE_CUDA
+    std::cout << "HAVE_CUDA!!!" << std::endl;
+    #else
+    std::cout << "Don't HAVE_CUDA!!!" << std::endl;
+    #endif
+    
     if (vm.count("help"))
     {
         std::cout << desc << std::endl;
@@ -315,6 +361,39 @@ main(int argc, char** argv)
 
                 bUseGPS = true;
             }
+            else if (type.compare("POSE") == 0)
+            {
+                Eigen::Vector3f xyz(0,0,0);
+                float yaw, pitch, roll;
+                
+                str >> xyz[0] >> xyz[1] >> xyz[2] >> yaw >> pitch >> roll;
+                yaw = yaw/180*M_PI;
+                pitch = pitch/180*M_PI;
+                roll = roll/180*M_PI;
+
+                // construct the odometry entry
+                Eigen::Isometry3f T;
+                T.matrix().block<3,3>(0,0) = RPY2mat(roll, pitch, yaw);
+                T.matrix().block<3,1>(0,3) = xyz;
+                inputOdometry[timestamp] = T;
+
+                bUseGPS = true;
+            }
+            else if (type.compare("POSE_QUAT") == 0)
+            {
+                Eigen::Vector3f xyz(0,0,0);
+                Eigen::Quaternionf IMU(0,0,0,1);
+                
+                str >> xyz[0] >> xyz[1] >> xyz[2] >> IMU.x() >> IMU.y() >> IMU.z() >> IMU.w();
+                
+                // construct the odometry entry
+                Eigen::Isometry3f T;
+                T.matrix().block<3,3>(0,0) = IMU.toRotationMatrix();
+                T.matrix().block<3,1>(0,3) = xyz;
+                inputOdometry[timestamp] = T;
+
+                bUseGPS = true;
+            }
         }
     }
 
@@ -355,6 +434,18 @@ main(int argc, char** argv)
         {
             if (bUseGPS)
             {
+                // // POSE input
+                // float roll, pitch, yaw;
+                // Eigen::Matrix3f R = T.rotation();
+                // mat2RPY(R, roll, pitch, yaw);
+                // Eigen::Vector3f gps = T.translation();
+                // camRigOdoCalib.addXyzYpr(gps[0], gps[1], gps[2], yaw, pitch, roll, timestamp);
+
+                // std::cout << "POSE: x_north=" << gps[0] << ", y_east=" << gps[1] << ", z_alt=" << gps[2]
+                //           << ", yaw=" << yaw << ", pitch=" << pitch << ", roll=" << roll
+                //           << " [" << timestamp << "]" << std::endl;
+
+                // GPS input (original in CamOdoCal)
                 Eigen::Quaternionf q(T.rotation());
                 Eigen::Vector3f gps = T.translation();
                 camRigOdoCalib.addGpsIns(gps[0], gps[1], gps[2], q.x(), q.y(), q.z(), q.w(), timestamp);
@@ -394,7 +485,7 @@ main(int argc, char** argv)
                 for (int c=0; c < cameraCount; c++)
                 {
                     if(camIterator[c] == inputImages[c].end()) continue;
-                    if(camIterator[c]->first < locTime)
+                    if(camIterator[c]->first <= locTime) // if(camIterator[c]->first < locTime)
                     {
                         uint64_t camTime = camIterator[c]->first;
                         std::cout << "IMG: " << camTime << " -> " << camIterator[c]->second << std::endl;
@@ -541,6 +632,13 @@ main(int argc, char** argv)
 
         std::cout << "Rotation Q: " << std::endl;
         std::cout << " " << Q.x() << " " << Q.y() << " " << Q.z() << " " << Q.w() << std::endl;
+
+        double roll, pitch, yaw;
+        Eigen::Matrix3d R = H.block<3,3>(0,0);
+        mat2RPY(R, roll, pitch, yaw);
+
+        std::cout << "Rotation yaw, picth, roll: " << std::endl;
+        std::cout << " " << yaw << " " << pitch << " " << roll << std::endl;
 
         std::cout << "Translation: " << std::endl;
         std::cout << T.transpose() << std::endl << std::endl;
