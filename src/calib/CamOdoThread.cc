@@ -190,12 +190,13 @@ CamOdoThread::signalFinished(void)
 void
 CamOdoThread::threadFunction(void)
 {
-    // TemporalFeatureTracker tracker(m_camera,
-    //                                SURF_GPU_DETECTOR, SURF_GPU_DESCRIPTOR,
-    //                                RATIO_GPU, m_preprocess, m_camOdoTransform);
+    // Seems like both settings work well, not causing failure. 
     TemporalFeatureTracker tracker(m_camera,
-                                   ORB_DETECTOR, ORB_DESCRIPTOR,
-                                   RATIO, m_preprocess, m_camOdoTransform);
+                                   SURF_GPU_DETECTOR, SURF_GPU_DESCRIPTOR,
+                                   RATIO_GPU, m_preprocess, m_camOdoTransform);
+    // TemporalFeatureTracker tracker(m_camera,
+    //                                ORB_DETECTOR, ORB_DESCRIPTOR,
+    //                                RATIO, m_preprocess, m_camOdoTransform);
     tracker.setVerbose(m_camOdoCalib.getVerbose());
 
     FramePtr framePrev;

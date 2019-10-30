@@ -122,7 +122,7 @@ main(int argc, char** argv)
     #else
     std::cout << "Don't HAVE_CUDA!!!" << std::endl;
     #endif
-    
+
     if (vm.count("help"))
     {
         std::cout << desc << std::endl;
@@ -445,14 +445,23 @@ main(int argc, char** argv)
                 //           << ", yaw=" << yaw << ", pitch=" << pitch << ", roll=" << roll
                 //           << " [" << timestamp << "]" << std::endl;
 
-                // GPS input (original in CamOdoCal)
+                // POSE input 
                 Eigen::Quaternionf q(T.rotation());
                 Eigen::Vector3f gps = T.translation();
-                camRigOdoCalib.addGpsIns(gps[0], gps[1], gps[2], q.x(), q.y(), q.z(), q.w(), timestamp);
+                camRigOdoCalib.addXyzIns(gps[0], gps[1], gps[2], q.x(), q.y(), q.z(), q.w(), timestamp);
 
-                std::cout << "GPS: lat=" << gps[0] << ", lon=" << gps[1] << ", alt=" << gps[2]
+                std::cout << "Xyz: x=" << gps[0] << ", y=" << gps[1] << ", z=" << gps[2]
                           << ", qx=" << q.x() << ", qy=" << q.y() << ", qz=" << q.z() << ", qw=" << q.w()
                           << " [" << timestamp << "]" << std::endl;
+
+                // // GPS input (original in CamOdoCal)
+                // Eigen::Quaternionf q(T.rotation());
+                // Eigen::Vector3f gps = T.translation();
+                // camRigOdoCalib.addGpsIns(gps[0], gps[1], gps[2], q.x(), q.y(), q.z(), q.w(), timestamp);
+
+                // std::cout << "GPS: lat=" << gps[0] << ", lon=" << gps[1] << ", alt=" << gps[2]
+                //           << ", qx=" << q.x() << ", qy=" << q.y() << ", qz=" << q.z() << ", qw=" << q.w()
+                //           << " [" << timestamp << "]" << std::endl;
             }else
             {
                 float yaw = std::atan2(T.linear()(1,0), T.linear()(0,0));

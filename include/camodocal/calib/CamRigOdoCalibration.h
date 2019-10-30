@@ -87,6 +87,7 @@ public:
                    uint64_t timestamp);
     
     // add by minghan
+    void addXyzIns(double x, double y, double z,double qx, double qy, double qz, double qw, uint64_t timestamp);
     void addXyzYpr(double x, double y, double z, double yaw, double pitch, double roll, uint64_t timestamp);
 
     //! If an initial odo transform estimate for a camera is specified there will be no automatic estimation step performed. (@note setup before start()!)
